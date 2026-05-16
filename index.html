@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alder Security — Job Tracker</title>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "react":             "https://esm.sh/react@18",
+      "react-dom/client":  "https://esm.sh/react-dom@18/client",
+      "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2",
+      "htm":               "https://esm.sh/htm@3"
+    }
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: #0c0f17;
+      color: #f1f5f9;
+      font-family: 'Rajdhani', system-ui, sans-serif;
+      font-size: 16px;
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    #root { min-height: 100vh; }
+    input, select, button, textarea { font-family: inherit; font-size: inherit; }
+    input:focus, select:focus, textarea:focus { outline: none; }
+    select option { background: #131720; color: #f1f5f9; }
+    ::placeholder { color: rgba(255,255,255,0.2); }
+    @keyframes fadeUp   { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:.45} }
+    @keyframes armed    { 0%,100%{box-shadow:0 0 24px rgba(16,185,129,.3)} 50%{box-shadow:0 0 48px rgba(16,185,129,.6)} }
+    @keyframes spin     { to{transform:rotate(360deg)} }
+    .fade  { animation: fadeUp .35s ease both; }
+    .pulse { animation: pulse 2s infinite; }
+  </style>
+</head>
+
+<body>
+<div id="root"></div>
+
+<script type="module">
+import { createElement as h, useState, useEffect, useRef, Fragment } from 'react';
+import { createRoot } from 'react-dom/client';
+import { createClient } from '@supabase/supabase-js';
+import htm from 'htm';
+
+const html = htm.bind(h);
+
+// ══════════════════════════════════════════════════════
+//  !! FILL THESE IN BEFORE DEPLOYING !!
+// ══════════════════════════════════════════════════════
+const SUPABASE_URL      = 'YOUR_SUPABASE_PROJECT_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const ADMIN_PASSWORD    = 'alder2025';   // change this
+// ══════════════════════════════════════════════════════
+
+const NOT_CONFIGURED =
+  SUPABASE_URL === 'YOUR_SUPABASE_PROJECT_URL' ||
+  SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY';
+
+const sb = NOT_CONFIGURED
+  ? null
+  : createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      realtime: { params: { eventsPerSecond: 10 } }
+    });
+
+// ── STATUS DEFINITIONS ────────────────────────────────
+const STATUSES = [
+  { key: 'confirmed', label: 'Order Confirmed',     short: 'Confirmed',   icon: '✓',  color: '#6b7280' },
+  { key: 'in_queue',  label: 'In Queue',            short: 'In Queue',    icon: '⏳', color: '#f59e0b' },
+  { key: 'en_route',  label: 'Tech En Route',       short: 'En Route',    icon: '🚗', color: '#0070f3' },
+  { key: 'active',    label: 'Installation Active', short: 'Installing',  icon: '⚡', color: '#8b5cf6' },
+  { key: 'armed',     label: 'System Fully Armed',  short: 'Armed',       icon: '🛡️', color: '#10b981' },
+];
+const STATUS_IDX = Object.fromEntries(STATUSES.map((s, i) => [s.key, i]));
+
+// ── SHARED STYLES ─────────────────────────────────────
+const card = (extra = {}) => ({
+  background: '#131720',
+  border: '1px solid rgba(255,255,255,0.07)',
+  borderRadius: 14,
+  padding: '20px',
+  ...extra,
+});
+
+const inp = (extra = {}) => ({
+  width: '100%',
+  padding: '12px 14px',
+  borderRadius: 10,
+  border: '1px solid rgba(255,255,255,0.1)',
+  background: 'rgba(255,255,255,0.05)',
+  color: '#f1f5f9',
+  fontSize: 15,
+  transition: 'border-color .2s',
+  ...extra,
+});
+
+const btn = (bg = '#0070f3', extra = {}) => ({
+  padding: '11px 20px',
+  borderRadius: 10,
+  border: 'none',
+  background: bg,
+  color: bg.startsWith('rgba') || bg === 'transparent' ? 'rgba(255,255,255,0.55)' : 'white',
+  fontWeight: 700,
+  cursor: 'pointer',
+  fontSize: 14,
+  fontFamily: 'inherit',
+  transition: 'opacity .15s',
+  letterSpacing: '.03em',
+  ...extra,
+});
+
+const mono = { fontFamily: "'Share Tech Mono', monospace" };
+
+const lbl = {
+  display: 'block',
+  fontSize: 11,
+  color: 'rgba(255,255,255,0.3)',
+  letterSpacing: '.14em',
+  textTransform: 'uppercase',
+  fontFamily: "'Share Tech Mono', monospace",
+  marginBottom: 7,
+};
+
+// ── SETUP SCREEN ──────────────────────────────────────
+function SetupScreen() {
+  return html`
+    <div style=${{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style=${{ ...card(), maxWidth: 480, width: '100%', textAlign: 'center', padding: 36 }}>
+        <div style=${{ fontSize: 40, marginBottom: 16 }}>⚙️</div>
+        <h2 style=${{ fontSize: 22, fontWeight: 700, marginBottom: 10 }}>Setup Required</h2>
+        <p style=${{ color: 'rgba(255,255,255,0.45)', lineHeight: 1.6, fontSize: 15, marginBottom: 20 }}>
+          Open <code style=${{ background: 'rgba(255,255,255,0.08)', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>index.html</code> and replace
+          <strong style=${{ color: '#f1f5f9' }}> SUPABASE_URL</strong> and <strong style=${{ color: '#f1f5f9' }}>SUPABASE_ANON_KEY</strong> at the top of the script with your Supabase project credentials.
+        </p>
+        <a href="https://supabase.com/dashboard" target="_blank"
+          style=${{ ...btn('#0070f3'), display: 'inline-block', textDecoration: 'none' }}>
+          Open Supabase Dashboard →
+        </a>
+      </div>
+    </div>
+  `;
+}
+
+// ── STATUS BADGE ──────────────────────────────────────
+function StatusBadge({ status }) {
+  const s = STATUSES.find(x => x.key === status) || STATUSES[0];
+  return html`
+    <span style=${{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      background: s.color + '18', border: `1px solid ${s.color}45`,
+      color: s.color, borderRadius: 20, padding: '4px 12px',
+      fontSize: 12, fontWeight: 700, letterSpacing: '.06em',
+      fontFamily: "'Share Tech Mono', monospace", whiteSpace: 'nowrap',
+    }}>
+      ${s.icon} ${s.label}
+    </span>
+  `;
+}
+
+// ── SPINNER ───────────────────────────────────────────
+function Spinner() {
+  return html`
+    <div style=${{
+      width: 20, height: 20, borderRadius: '50%',
+      border: '2px solid rgba(255,255,255,0.1)',
+      borderTopColor: '#0070f3',
+      animation: 'spin .7s linear infinite',
+      display: 'inline-block',
+    }} />
+  `;
+}
+
+// ── PROGRESS BAR ──────────────────────────────────────
+function ProgressBar({ status }) {
+  const current = STATUS_IDX[status] ?? 0;
+
+  // Build two rows: (1) dots + connectors, (2) labels
+  const dotRow = [];
+  const lblRow = [];
+
+  STATUSES.forEach((s, i) => {
+    const done   = i < current;
+    const active = i === current;
+    const dotColor = done ? '#10b981' : active ? s.color : '#1e2433';
+
+    // connector before each dot except first
+    if (i > 0) {
+      dotRow.push(h('div', {
+        key: `line-${i}`,
+        style: {
+          flex: 1, height: 2, alignSelf: 'center',
+          background: done ? '#10b981' : 'rgba(255,255,255,0.07)',
+          transition: 'background .5s',
+          minWidth: 8,
+        }
+      }));
+    }
+
+    // dot
+    dotRow.push(h('div', {
+      key: `dot-${s.key}`,
+      style: {
+        width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+        background: active ? s.color + '1a' : done ? '#10b9811a' : '#0c0f17',
+        border: `2px solid ${dotColor}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: done ? 14 : 17,
+        boxShadow: active ? `0 0 22px ${s.color}55` : 'none',
+        transition: 'all .4s',
+        position: 'relative', zIndex: 1,
+      }
+    }, done ? '✓' : s.icon));
+
+    // label (flex: 1 except middle ones get extra spacing)
+    lblRow.push(h('div', {
+      key: `lbl-${s.key}`,
+      style: {
+        flex: i === 0 || i === STATUSES.length - 1 ? '0 0 40px' : '1 1 0',
+        textAlign: 'center',
+        fontSize: 10,
+        color: active ? s.color : done ? '#10b981' : 'rgba(255,255,255,0.25)',
+        fontWeight: active ? 700 : 500,
+        lineHeight: 1.3,
+        fontFamily: "'Share Tech Mono', monospace",
+        marginTop: 8,
+        minWidth: 0,
+        wordBreak: 'break-word',
+      }
+    }, s.short));
+  });
+
+  return h('div', { style: { overflowX: 'auto', paddingBottom: 4 } },
+    h('div', { style: { minWidth: 320 } },
+      h('div', { style: { display: 'flex', alignItems: 'center' } }, ...dotRow),
+      h('div', { style: { display: 'flex', alignItems: 'flex-start' } }, ...lblRow),
+    )
+  );
+}
+
+// ── CUSTOMER VIEW ─────────────────────────────────────
+function CustomerView({ initialJobId }) {
+  const [contact, setContact]   = useState('');
+  const [job, setJob]           = useState(null);
+  const [loading, setLoading]   = useState(!!initialJobId);
+  const [error, setError]       = useState('');
+  const [searched, setSearched] = useState(false);
+  const inputRef = useRef();
+
+  useEffect(() => {
+    if (initialJobId) fetchById(initialJobId);
+    else inputRef.current?.focus();
+  }, []);
+
+  // Real-time subscription on active job
+  useEffect(() => {
+    if (!job?.id) return;
+    const ch = sb.channel('customer-job-' + job.id)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'alder_jobs',
+        filter: `id=eq.${job.id}`,
+      }, ({ new: updated }) => setJob(prev => ({ ...prev, ...updated })))
+      .subscribe();
+    return () => { sb.removeChannel(ch); };
+  }, [job?.id]);
+
+  async function fetchById(id) {
+    setLoading(true);
+    const { data, error: err } = await sb.from('alder_jobs').select('*').eq('id', id).maybeSingle();
+    setLoading(false);
+    setSearched(true);
+    if (err || !data) { setError('Job not found.'); return; }
+    setJob(data); setError('');
+  }
+
+  async function search(e) {
+    e.preventDefault();
+    const q = contact.trim();
+    if (!q) return;
+    setLoading(true); setError(''); setSearched(false); setJob(null);
+    const { data, error: err } = await sb
+      .from('alder_jobs').select('*')
+      .ilike('contact', `%${q}%`)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    setLoading(false); setSearched(true);
+    if (err || !data?.length) {
+      setError("We couldn't find a job with that info. Double-check your email or phone and try again.");
+      return;
+    }
+    setJob(data[0]); setError('');
+  }
+
+  function reset() {
+    setJob(null); setSearched(false); setContact(''); setError('');
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }
+
+  const isArmed   = job?.status === 'armed';
+  const isInQueue = job?.status === 'in_queue';
+  const isEnRoute = job?.status === 'en_route';
+  const isActive  = job?.status === 'active';
+
+  return html`
+    <div style=${{ maxWidth: 560, margin: '0 auto', padding: '28px 20px 72px' }}>
+
+      <!-- Header -->
+      <div style=${{ marginBottom: 28 }}>
+        <div style=${{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
+          <span style=${{ fontSize: 20 }}>🛡️</span>
+          <span style=${{ ...mono, fontSize: 11, color: '#0070f3', letterSpacing: 2 }}>ALDER SECURITY</span>
+        </div>
+        <h1 style=${{ fontSize: 27, fontWeight: 700, lineHeight: 1.1, marginBottom: 6 }}>
+          Track Your Installation
+        </h1>
+        <p style=${{ color: 'rgba(255,255,255,0.4)', fontSize: 14, lineHeight: 1.55 }}>
+          Enter the phone or email you gave your rep to see your real-time status.
+        </p>
+      </div>
+
+      <!-- Search form -->
+      ${!job && html`
+        <form onSubmit=${search} style=${{ marginBottom: 20 }}>
+          <label style=${lbl}>Your Email or Phone Number</label>
+          <div style=${{ display: 'flex', gap: 10 }}>
+            <input
+              ref=${inputRef}
+              value=${contact}
+              onChange=${e => setContact(e.target.value)}
+              placeholder="you@email.com  or  (601) 555-0100"
+              disabled=${loading}
+              style=${{ ...inp(), flex: 1 }}
+            />
+            <button type="submit" disabled=${loading}
+              style=${{ ...btn('#0070f3'), padding: '11px 22px', opacity: loading ? .6 : 1, flexShrink: 0 }}>
+              ${loading ? html`<${Spinner} />` : 'Find'}
+            </button>
+          </div>
+          ${error && searched && html`
+            <div style=${{ marginTop: 10, color: '#f87171', fontSize: 13, lineHeight: 1.5, ...mono }}>
+              ${error}
+            </div>
+          `}
+        </form>
+      `}
+
+      <!-- Job card -->
+      ${job && html`
+        <div class="fade">
+
+          <!-- Armed banner -->
+          ${isArmed && html`
+            <div style=${{
+              background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.35)',
+              borderRadius: 14, padding: '22px 20px', marginBottom: 18, textAlign: 'center',
+              animation: 'armed 3s ease-in-out infinite',
+            }}>
+              <div style=${{ fontSize: 36, marginBottom: 10 }}>🛡️</div>
+              <div style=${{ color: '#10b981', fontWeight: 700, fontSize: 20, marginBottom: 5 }}>
+                Your Home is Protected
+              </div>
+              <div style=${{ color: 'rgba(255,255,255,0.55)', fontSize: 14 }}>
+                Alder Security is fully armed and monitoring 24/7.
+              </div>
+            </div>
+          `}
+
+          <!-- En-route alert -->
+          ${isEnRoute && html`
+            <div style=${{
+              background: 'rgba(0,112,243,0.08)', border: '1px solid rgba(0,112,243,0.3)',
+              borderRadius: 14, padding: '14px 18px', marginBottom: 14,
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <span style=${{ fontSize: 22 }}>🚗</span>
+              <div>
+                <div style=${{ fontWeight: 700, color: '#3b9eff', marginBottom: 3 }}>Your tech is on the way</div>
+                <div style=${{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
+                  ${job.eta ? `Estimated arrival: ${job.eta}` : 'Estimated arrival time will update shortly.'}
+                </div>
+              </div>
+            </div>
+          `}
+
+          <!-- Active alert -->
+          ${isActive && html`
+            <div style=${{
+              background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.3)',
+              borderRadius: 14, padding: '14px 18px', marginBottom: 14,
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <span style=${{ fontSize: 22, animation: 'pulse 1s infinite', display: 'inline-block' }}>⚡</span>
+              <div>
+                <div style=${{ fontWeight: 700, color: '#a78bfa', marginBottom: 3 }}>Installation in progress</div>
+                <div style=${{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
+                  Your technician is currently at your home installing the system.
+                </div>
+              </div>
+            </div>
+          `}
+
+          <!-- Main status card -->
+          <div style=${{ ...card(), marginBottom: 14 }}>
+            <div style=${{
+              display: 'flex', justifyContent: 'space-between',
+              alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 18,
+            }}>
+              <div>
+                <div style=${lbl}>Customer</div>
+                <div style=${{ fontSize: 20, fontWeight: 700, marginBottom: 3 }}>${job.customer_name}</div>
+                ${job.address && html`
+                  <div style=${{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>${job.address}</div>
+                `}
+              </div>
+              <${StatusBadge} status=${job.status} />
+            </div>
+
+            <${ProgressBar} status=${job.status} />
+          </div>
+
+          <!-- Queue info -->
+          ${isInQueue && html`
+            <div style=${{
+              ...card({ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)' }),
+              marginBottom: 14,
+            }}>
+              <div style=${{ color: '#f59e0b', fontWeight: 700, fontSize: 13, marginBottom: 10, ...mono }}>
+                📋 QUEUE POSITION
+              </div>
+              <div style=${{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+                <div style=${{ fontSize: 48, fontWeight: 700, lineHeight: 1, color: '#f59e0b' }}>
+                  #${job.queue_position ?? '—'}
+                </div>
+                <div style=${{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>in line</div>
+              </div>
+              <div style=${{ color: 'rgba(255,255,255,0.6)', fontSize: 14, lineHeight: 1.5 }}>
+                ${job.tech_name
+                  ? `You are next in line for Technician ${job.tech_name}.`
+                  : 'Your technician will be assigned shortly.'
+                }
+                ${job.eta ? html` Estimated start: <strong style=${{ color: '#f1f5f9' }}>${job.eta}</strong>.` : ''}
+              </div>
+            </div>
+          `}
+
+          <!-- Tech + ETA -->
+          ${(job.tech_name || job.eta) && !isInQueue && html`
+            <div style=${{ ...card(), marginBottom: 14 }}>
+              <div style=${{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                ${job.tech_name && html`
+                  <div>
+                    <div style=${lbl}>Technician</div>
+                    <div style=${{ fontSize: 17, fontWeight: 600 }}>${job.tech_name}</div>
+                  </div>
+                `}
+                ${job.eta && html`
+                  <div>
+                    <div style=${lbl}>ETA</div>
+                    <div style=${{ fontSize: 17, fontWeight: 600, color: '#3b9eff' }}>${job.eta}</div>
+                  </div>
+                `}
+              </div>
+            </div>
+          `}
+
+          <!-- Notes from tech -->
+          ${job.notes && html`
+            <div style=${{
+              ...card({ border: '1px solid rgba(0,112,243,0.2)' }), marginBottom: 14,
+            }}>
+              <div style=${{ ...lbl, color: '#3b9eff' }}>Note from your technician</div>
+              <div style=${{ color: 'rgba(255,255,255,0.75)', lineHeight: 1.65, fontSize: 15 }}>
+                ${job.notes}
+              </div>
+            </div>
+          `}
+
+          <!-- Live indicator -->
+          <div style=${{ textAlign: 'center', marginBottom: 14 }}>
+            <span style=${{ ...mono, fontSize: 11, color: 'rgba(255,255,255,0.25)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span class="pulse" style=${{ color: '#10b981', fontSize: 8 }}>●</span>
+              Updates live — no need to refresh
+            </span>
+          </div>
+
+          <button onClick=${reset}
+            style=${{ ...btn('rgba(255,255,255,0.05)'), width: '100%', fontSize: 13 }}>
+            ← Search a Different Number
+          </button>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ── JOB CARD (ADMIN) ─────────────────────────────────
+function JobCard({ job, onUpdate, onDelete }) {
+  const [open, setOpen]         = useState(false);
+  const [saving, setSaving]     = useState(false);
+  const [eta, setEta]           = useState(job.eta || '');
+  const [qPos, setQPos]         = useState(job.queue_position ?? '');
+  const [tech, setTech]         = useState(job.tech_name || '');
+  const [notes, setNotes]       = useState(job.notes || '');
+
+  // Keep local state in sync if parent updates (realtime)
+  useEffect(() => {
+    setEta(job.eta || '');
+    setQPos(job.queue_position ?? '');
+    setTech(job.tech_name || '');
+    setNotes(job.notes || '');
+  }, [job]);
+
+  async function save() {
+    setSaving(true);
+    await onUpdate(job.id, {
+      eta:            eta || null,
+      queue_position: qPos !== '' ? parseInt(qPos, 10) : null,
+      tech_name:      tech || null,
+      notes:          notes || null,
+    });
+    setSaving(false);
+    setOpen(false);
+  }
+
+  async function changeStatus(newStatus) {
+    await onUpdate(job.id, { status: newStatus });
+  }
+
+  const s = STATUSES.find(x => x.key === job.status) || STATUSES[0];
+  const createdDate = new Date(job.created_at).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+  });
+
+  return html`
+    <div style=${{
+      ...card({ borderColor: `${s.color}28`, padding: 0 }),
+      overflow: 'hidden',
+    }}>
+
+      <!-- Card top bar -->
+      <div style=${{ height: 3, background: s.color, borderRadius: '14px 14px 0 0', opacity: .7 }} />
+
+      <!-- Card header -->
+      <div style=${{
+        padding: '16px 18px',
+        display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12, flexWrap: 'wrap',
+      }}>
+        <div style=${{ flex: 1, minWidth: 200 }}>
+          <div style=${{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+            <span style=${{ fontSize: 16, fontWeight: 700 }}>${job.customer_name}</span>
+            ${job.queue_position != null && job.status === 'in_queue' && html`
+              <span style=${{
+                ...mono, fontSize: 11, color: '#f59e0b',
+                background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)',
+                padding: '2px 9px', borderRadius: 8,
+              }}>
+                #${job.queue_position} in queue
+              </span>
+            `}
+          </div>
+          <div style=${{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style=${{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>${job.contact}</span>
+            ${job.address && html`<span style=${{ color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>${job.address}</span>`}
+            ${job.tech_name && html`<span style=${{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>👤 ${job.tech_name}</span>`}
+            ${job.eta && html`<span style=${{ color: '#3b9eff', fontSize: 13 }}>⏱ ${job.eta}</span>`}
+            <span style=${{ ...mono, color: 'rgba(255,255,255,0.2)', fontSize: 11 }}>${createdDate}</span>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div style=${{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <select
+            value=${job.status}
+            onChange=${e => changeStatus(e.target.value)}
+            style=${{
+              ...inp({
+                width: 'auto', padding: '8px 10px', fontSize: 12,
+                border: `1px solid ${s.color}50`,
+                background: s.color + '12',
+                color: s.color, fontWeight: 700, cursor: 'pointer',
+              })
+            }}
+          >
+            ${STATUSES.map(st => html`
+              <option key=${st.key} value=${st.key}>${st.label}</option>
+            `)}
+          </select>
+
+          <button onClick=${() => setOpen(o => !o)}
+            style=${{ ...btn('rgba(255,255,255,0.06)', { padding: '8px 13px', fontSize: 13, color: 'rgba(255,255,255,0.5)' }) }}>
+            ${open ? '▲' : '▼'}
+          </button>
+
+          <button onClick=${() => onDelete(job.id)}
+            style=${{ ...btn('rgba(239,68,68,0.1)', { padding: '8px 12px', fontSize: 13, color: '#f87171' }) }}>
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Expanded editor -->
+      ${open && html`
+        <div class="fade" style=${{
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          padding: '18px 18px 16px',
+          background: 'rgba(0,0,0,0.2)',
+        }}>
+          <div style=${{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style=${lbl}>Technician</label>
+              <input value=${tech} onChange=${e => setTech(e.target.value)}
+                placeholder="e.g. Kenneth" style=${inp()} />
+            </div>
+            <div>
+              <label style=${lbl}>ETA</label>
+              <input value=${eta} onChange=${e => setEta(e.target.value)}
+                placeholder="e.g. 2:30 PM or ~45 min" style=${inp()} />
+            </div>
+            <div>
+              <label style=${lbl}>Queue Position</label>
+              <input type="number" min="1" value=${qPos}
+                onChange=${e => setQPos(e.target.value)}
+                placeholder="1" style=${inp()} />
+            </div>
+          </div>
+          <div style=${{ marginBottom: 14 }}>
+            <label style=${lbl}>Note to Customer</label>
+            <textarea value=${notes} onChange=${e => setNotes(e.target.value)}
+              placeholder="Any message the customer should see on their status screen..."
+              rows="2"
+              style=${{ ...inp(), resize: 'vertical' }}
+            />
+          </div>
+          <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <div style=${{ ...mono, fontSize: 11, color: 'rgba(255,255,255,0.18)' }}>
+              ID: ${job.id.slice(0, 12)}…
+            </div>
+            <div style=${{ display: 'flex', gap: 10 }}>
+              <button onClick=${() => setOpen(false)}
+                style=${{ ...btn('rgba(255,255,255,0.05)', { fontSize: 13, padding: '9px 16px', color: 'rgba(255,255,255,0.4)' }) }}>
+                Cancel
+              </button>
+              <button onClick=${save} disabled=${saving}
+                style=${{ ...btn('#0070f3', { opacity: saving ? .6 : 1, padding: '9px 20px' }) }}>
+                ${saving ? html`<${Spinner} />` : '✓ Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ── ADD JOB MODAL ─────────────────────────────────────
+function AddJobModal({ onAdd, onClose }) {
+  const [form, setForm] = useState({
+    customer_name: '', contact: '', address: '',
+    tech_name: 'Kenneth', status: 'confirmed',
+    queue_position: '', eta: '', notes: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.customer_name || !form.contact) return;
+    setSaving(true);
+    await onAdd({
+      customer_name:  form.customer_name,
+      contact:        form.contact,
+      address:        form.address || null,
+      status:         form.status,
+      tech_name:      form.tech_name || null,
+      queue_position: form.queue_position ? parseInt(form.queue_position, 10) : null,
+      eta:            form.eta || null,
+      notes:          form.notes || null,
+    });
+    setSaving(false);
+  }
+
+  return html`
+    <div
+      onClick=${e => e.target === e.currentTarget && onClose()}
+      style=${{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 100, padding: 20,
+      }}
+    >
+      <div style=${{ ...card(), width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto' }} class="fade">
+        <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style=${{ fontSize: 19, fontWeight: 700 }}>Add New Job</h3>
+          <button onClick=${onClose}
+            style=${{ ...btn('transparent', { padding: '4px 10px', fontSize: 18, color: 'rgba(255,255,255,0.4)' }) }}>
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit=${submit}>
+          <div style=${{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style=${lbl}>Customer Name *</label>
+              <input required value=${form.customer_name}
+                onChange=${e => set('customer_name', e.target.value)}
+                placeholder="Full Name" style=${inp()} />
+            </div>
+            <div>
+              <label style=${lbl}>Email or Phone *</label>
+              <input required value=${form.contact}
+                onChange=${e => set('contact', e.target.value)}
+                placeholder="email or phone" style=${inp()} />
+            </div>
+          </div>
+
+          <div style=${{ marginBottom: 12 }}>
+            <label style=${lbl}>Address</label>
+            <input value=${form.address}
+              onChange=${e => set('address', e.target.value)}
+              placeholder="123 Main St, Jackson, MS" style=${inp()} />
+          </div>
+
+          <div style=${{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style=${lbl}>Status</label>
+              <select value=${form.status}
+                onChange=${e => set('status', e.target.value)}
+                style=${{ ...inp(), cursor: 'pointer' }}>
+                ${STATUSES.map(s => html`<option key=${s.key} value=${s.key}>${s.label}</option>`)}
+              </select>
+            </div>
+            <div>
+              <label style=${lbl}>Technician</label>
+              <input value=${form.tech_name}
+                onChange=${e => set('tech_name', e.target.value)}
+                placeholder="Kenneth" style=${inp()} />
+            </div>
+            <div>
+              <label style=${lbl}>Queue Position</label>
+              <input type="number" min="1" value=${form.queue_position}
+                onChange=${e => set('queue_position', e.target.value)}
+                placeholder="1" style=${inp()} />
+            </div>
+          </div>
+
+          <div style=${{ marginBottom: 12 }}>
+            <label style=${lbl}>ETA</label>
+            <input value=${form.eta}
+              onChange=${e => set('eta', e.target.value)}
+              placeholder="e.g. 2:30 PM or ~45 min" style=${inp()} />
+          </div>
+
+          <div style=${{ marginBottom: 20 }}>
+            <label style=${lbl}>Note to Customer</label>
+            <textarea value=${form.notes}
+              onChange=${e => set('notes', e.target.value)}
+              placeholder="Optional message shown on the customer's tracking screen..."
+              rows="2" style=${{ ...inp(), resize: 'vertical' }} />
+          </div>
+
+          <div style=${{ display: 'flex', gap: 10 }}>
+            <button type="button" onClick=${onClose}
+              style=${{ ...btn('rgba(255,255,255,0.05)', { flex: 1, color: 'rgba(255,255,255,0.4)' }) }}>
+              Cancel
+            </button>
+            <button type="submit" disabled=${saving}
+              style=${{ ...btn('#10b981', { flex: 2, opacity: saving ? .6 : 1 }) }}>
+              ${saving ? html`<${Spinner} />` : '+ Add Job'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+// ── ADMIN VIEW ────────────────────────────────────────
+function AdminView() {
+  const [authed, setAuthed]       = useState(false);
+  const [pw, setPw]               = useState('');
+  const [pwErr, setPwErr]         = useState('');
+  const [jobs, setJobs]           = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [showAdd, setShowAdd]     = useState(false);
+  const [filter, setFilter]       = useState('all');
+
+  function login(e) {
+    e.preventDefault();
+    if (pw === ADMIN_PASSWORD) { setAuthed(true); setPwErr(''); }
+    else setPwErr('Incorrect password.');
+  }
+
+  useEffect(() => {
+    if (!authed) return;
+    loadJobs();
+    const ch = sb.channel('admin-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'alder_jobs' }, () => loadJobs())
+      .subscribe();
+    return () => { sb.removeChannel(ch); };
+  }, [authed]);
+
+  async function loadJobs() {
+    setLoading(true);
+    const { data } = await sb
+      .from('alder_jobs').select('*')
+      .order('queue_position', { ascending: true, nullsLast: true })
+      .order('created_at', { ascending: false });
+    setLoading(false);
+    if (data) setJobs(data);
+  }
+
+  async function updateJob(id, patch) {
+    await sb.from('alder_jobs').update(patch).eq('id', id);
+    loadJobs();
+  }
+
+  async function deleteJob(id) {
+    if (!confirm('Delete this job? This cannot be undone.')) return;
+    await sb.from('alder_jobs').delete().eq('id', id);
+    loadJobs();
+  }
+
+  async function addJob(job) {
+    await sb.from('alder_jobs').insert([job]);
+    loadJobs();
+    setShowAdd(false);
+  }
+
+  if (!authed) {
+    return html`
+      <div style=${{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style=${{ ...card(), maxWidth: 380, width: '100%' }}>
+          <div style=${{ textAlign: 'center', marginBottom: 24 }}>
+            <div style=${{ fontSize: 32, marginBottom: 12 }}>🔐</div>
+            <h2 style=${{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Admin Panel</h2>
+            <p style=${{ color: 'rgba(255,255,255,0.35)', fontSize: 14 }}>Alder Security — Lead Tech Access</p>
+          </div>
+          <form onSubmit=${login}>
+            <label style=${lbl}>Password</label>
+            <input type="password" value=${pw} onChange=${e => setPw(e.target.value)}
+              placeholder="Enter admin password" style=${{ ...inp(), marginBottom: 12 }} autoFocus />
+            ${pwErr && html`
+              <div style=${{ color: '#f87171', fontSize: 13, marginBottom: 10, ...mono }}>${pwErr}</div>
+            `}
+            <button type="submit" style=${{ ...btn('#0070f3'), width: '100%', padding: 13 }}>
+              Access Panel
+            </button>
+          </form>
+        </div>
+      </div>
+    `;
+  }
+
+  const filteredJobs = filter === 'all' ? jobs : jobs.filter(j => j.status === filter);
+
+  return html`
+    <div style=${{ maxWidth: 920, margin: '0 auto', padding: '28px 20px 72px' }}>
+
+      <!-- Header -->
+      <div style=${{
+        display: 'flex', justifyContent: 'space-between',
+        alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12,
+      }}>
+        <div>
+          <div style=${{ ...mono, fontSize: 11, color: '#0070f3', letterSpacing: 2, marginBottom: 5 }}>
+            🛡️ ALDER SECURITY — ADMIN
+          </div>
+          <h1 style=${{ fontSize: 24, fontWeight: 700 }}>Job Tracker</h1>
+        </div>
+        <div style=${{ display: 'flex', gap: 10 }}>
+          <button onClick=${loadJobs}
+            style=${{ ...btn('rgba(255,255,255,0.06)', { fontSize: 13, color: 'rgba(255,255,255,0.5)' }) }}>
+            ↻ Refresh
+          </button>
+          <button onClick=${() => setShowAdd(true)} style=${{ ...btn('#10b981') }}>
+            + Add Job
+          </button>
+        </div>
+      </div>
+
+      <!-- Stats strip -->
+      <div style=${{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 20 }}>
+        ${STATUSES.map(s => {
+          const count = jobs.filter(j => j.status === s.key).length;
+          return html`
+            <div key=${s.key}
+              onClick=${() => setFilter(f => f === s.key ? 'all' : s.key)}
+              style=${{
+                ...card({
+                  padding: '12px 14px', textAlign: 'center', cursor: 'pointer',
+                  border: filter === s.key ? `1px solid ${s.color}` : `1px solid ${count > 0 ? s.color + '30' : 'rgba(255,255,255,0.07)'}`,
+                  background: filter === s.key ? s.color + '14' : '#131720',
+                  transition: 'all .2s',
+                })
+              }}
+            >
+              <div style=${{ ...mono, fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 4 }}>${s.short}</div>
+              <div style=${{ fontSize: 26, fontWeight: 700, color: count > 0 ? s.color : 'rgba(255,255,255,0.15)' }}>
+                ${count}
+              </div>
+            </div>
+          `;
+        })}
+      </div>
+
+      <!-- Filter label -->
+      ${filter !== 'all' && html`
+        <div style=${{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <span style=${{ ...mono, fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
+            Showing: ${STATUS_IDX[filter] !== undefined ? STATUSES[STATUS_IDX[filter]].label : filter}
+          </span>
+          <button onClick=${() => setFilter('all')}
+            style=${{ ...btn('rgba(255,255,255,0.06)', { padding: '4px 10px', fontSize: 12, color: 'rgba(255,255,255,0.45)' }) }}>
+            Clear ✕
+          </button>
+        </div>
+      `}
+
+      <!-- Job list -->
+      ${loading && html`
+        <div style=${{ textAlign: 'center', padding: 48 }}><${Spinner} /></div>
+      `}
+
+      ${!loading && filteredJobs.length === 0 && html`
+        <div style=${{ ...card(), textAlign: 'center', padding: 48 }}>
+          <div style=${{ fontSize: 36, marginBottom: 12 }}>📋</div>
+          <div style=${{ color: 'rgba(255,255,255,0.3)', fontSize: 15 }}>
+            ${filter === 'all' ? 'No jobs yet. Add your first one.' : 'No jobs with this status.'}
+          </div>
+        </div>
+      `}
+
+      <div style=${{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        ${filteredJobs.map(job => html`
+          <${JobCard}
+            key=${job.id}
+            job=${job}
+            onUpdate=${updateJob}
+            onDelete=${deleteJob}
+          />
+        `)}
+      </div>
+
+      ${showAdd && html`
+        <${AddJobModal} onAdd=${addJob} onClose=${() => setShowAdd(false)} />
+      `}
+    </div>
+  `;
+}
+
+// ── ROOT ─────────────────────────────────────────────
+function App() {
+  const params = new URLSearchParams(window.location.search);
+  const isAdmin = params.get('admin') === 'true';
+  const jobId   = params.get('job');
+
+  if (NOT_CONFIGURED) return html`<${SetupScreen} />`;
+  if (isAdmin)        return html`<${AdminView} />`;
+  return html`<${CustomerView} initialJobId=${jobId} />`;
+}
+
+createRoot(document.getElementById('root')).render(html`<${App} />`);
+</script>
+</body>
+</html>
