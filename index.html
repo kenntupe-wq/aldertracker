@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Alder Security — Job Tracker</title>
+  <title>Alder Tracker — Job Tracker</title>
 
   <script type="importmap">
   {
@@ -36,12 +36,31 @@
     input:focus, select:focus, textarea:focus { outline: none; }
     select option { background: #131720; color: #f1f5f9; }
     ::placeholder { color: rgba(255,255,255,0.2); }
+
     @keyframes fadeUp   { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeIn   { from{opacity:0} to{opacity:1} }
     @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:.45} }
     @keyframes armed    { 0%,100%{box-shadow:0 0 24px rgba(16,185,129,.3)} 50%{box-shadow:0 0 48px rgba(16,185,129,.6)} }
     @keyframes spin     { to{transform:rotate(360deg)} }
+    @keyframes slideIn  { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes slideOut { from{opacity:1;transform:translateY(0)} to{opacity:0;transform:translateY(8px)} }
+    @keyframes ticker   { 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
+    @keyframes shimmer  { 0%{background-position:200% center} 100%{background-position:-200% center} }
+    @keyframes float    { 0%,100%{transform:translateY(0px)} 50%{transform:translateY(-6px)} }
+    @keyframes glow     { 0%,100%{text-shadow:0 0 10px rgba(16,185,129,0.4)} 50%{text-shadow:0 0 24px rgba(16,185,129,0.8), 0 0 40px rgba(16,185,129,0.3)} }
+
     .fade  { animation: fadeUp .35s ease both; }
     .pulse { animation: pulse 2s infinite; }
+    .float { animation: float 3s ease-in-out infinite; }
+
+    .hype-text {
+      background: linear-gradient(90deg, #10b981, #3b9eff, #a78bfa, #10b981);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: shimmer 3s linear infinite;
+    }
   </style>
 </head>
 
@@ -49,26 +68,21 @@
 <div id="root"></div>
 
 <script type="module">
-import { createElement as h, useState, useEffect, useRef, Fragment } from 'react';
+import { createElement as h, useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
 import htm from 'htm';
 
 const html = htm.bind(h);
 
-// ══════════════════════════════════════════════════════
-//  CONFIGURED SUPABASE CREDENTIALS
-// ══════════════════════════════════════════════════════
 const SUPABASE_URL      = 'https://jhiwjizymcqsevlnmfth.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoaXdqaXp5bWNxc2V2bG5tZnRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTM5MjQsImV4cCI6MjA5NDQ2OTkyNH0.CE8pYqJU7f5eQDblTXWnbGyulUlKxDaj-wRJaVU4avM';
 const ADMIN_PASSWORD    = 'alder2025';
-// ══════════════════════════════════════════════════════
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
 });
 
-// ── STATUS DEFINITIONS ────────────────────────────────
 const STATUSES = [
   { key: 'confirmed', label: 'Order Confirmed',     short: 'Confirmed',   icon: '✓',  color: '#6b7280' },
   { key: 'in_queue',  label: 'In Queue',            short: 'In Queue',    icon: '⏳', color: '#f59e0b' },
@@ -78,7 +92,44 @@ const STATUSES = [
 ];
 const STATUS_IDX = Object.fromEntries(STATUSES.map((s, i) => [s.key, i]));
 
-// ── SHARED STYLES ─────────────────────────────────────
+// ── Hype content ──────────────────────────────────────────────────────────────
+
+const HYPE_MESSAGES = [
+  { emoji: '🔥', text: 'Get ready. Your life is about to change.' },
+  { emoji: '😤', text: 'Your neighbors are already jealous and they don\'t even know it yet.' },
+  { emoji: '👻', text: 'Local burglars have been notified. They are not happy.' },
+  { emoji: '💅', text: 'You made the best decision of your entire homeowning career.' },
+  { emoji: '🧠', text: 'Big brain move. Truly. We\'re proud of you.' },
+  { emoji: '🌙', text: 'Sleep has never been this good. You\'ll see tonight.' },
+  { emoji: '📬', text: 'Your future self is composing a thank-you note right now.' },
+  { emoji: '🏆', text: 'You just unlocked: World\'s Most Protected Home.' },
+  { emoji: '😎', text: 'Crime in your area looked up your address. Immediately backed down.' },
+  { emoji: '🎯', text: 'Plot twist: you just became the safest house on the block.' },
+  { emoji: '🦾', text: 'Your home is about to get superpowers. Literally.' },
+  { emoji: '🎉', text: 'Party at your place — it\'s the only one with a force field.' },
+];
+
+const ALDER_FACTS = [
+  { icon: '🏠', fact: 'Alder monitors over 180,000 homes across the country. Yours is next.', label: 'DID YOU KNOW' },
+  { icon: '⚡', fact: 'Alder\'s professional monitoring team responds in seconds — not minutes. Every. Single. Time.', label: 'FUN FACT' },
+  { icon: '📡', fact: 'Your system communicates with monitoring centers 24/7/365 — yes, even on Christmas.', label: 'FUN FACT' },
+  { icon: '🔋', fact: 'Alder systems have backup power so they keep protecting you even when the lights go out.', label: 'DID YOU KNOW' },
+  { icon: '🛡️', fact: 'Alder was founded with one mission: make professional security available to everyone. Mission accepted.', label: 'OUR STORY' },
+  { icon: '📱', fact: 'You\'ll be able to arm, disarm, and check in on your home from anywhere in the world. Vacation unlocked.', label: 'PRO TIP' },
+  { icon: '🚨', fact: 'If an alarm triggers, Alder dispatches emergency services immediately — no hold music, no waiting.', label: 'FUN FACT' },
+  { icon: '🤝', fact: 'Over a decade of protecting families. Alder has been doing this since 2012.', label: 'DID YOU KNOW' },
+];
+
+const WAIT_AFFIRMATIONS = [
+  'Hang tight — greatness takes a moment to arrive.',
+  'Good things come to those who wait. Great things come to Alder customers.',
+  'We promise this is worth it. (Spoiler: it absolutely is.)',
+  'Your patience is noted and deeply appreciated. ❤️',
+  'Fun fact: You\'re already safer than you were yesterday.',
+];
+
+// ── Shared style helpers ───────────────────────────────────────────────────────
+
 const card = (extra = {}) => ({
   background: '#131720',
   border: '1px solid rgba(255,255,255,0.07)',
@@ -126,7 +177,8 @@ const lbl = {
   marginBottom: 7,
 };
 
-// ── STATUS BADGE ──────────────────────────────────────
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
 function StatusBadge({ status }) {
   const s = STATUSES.find(x => x.key === status) || STATUSES[0];
   return html`
@@ -142,7 +194,6 @@ function StatusBadge({ status }) {
   `;
 }
 
-// ── SPINNER ───────────────────────────────────────────
 function Spinner() {
   return html`
     <div style=${{
@@ -155,7 +206,6 @@ function Spinner() {
   `;
 }
 
-// ── PROGRESS BAR ──────────────────────────────────────
 function ProgressBar({ status }) {
   const current = STATUS_IDX[status] ?? 0;
   const dotRow = [];
@@ -217,7 +267,174 @@ function ProgressBar({ status }) {
   );
 }
 
-// ── CUSTOMER VIEW ─────────────────────────────────────
+// ── NEW: Rotating hype message ─────────────────────────────────────────────────
+
+function HypeRotator() {
+  const [idx, setIdx] = useState(() => Math.floor(Math.random() * HYPE_MESSAGES.length));
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIdx(i => (i + 1) % HYPE_MESSAGES.length);
+        setVisible(true);
+      }, 400);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const msg = HYPE_MESSAGES[idx];
+
+  return html`
+    <div style=${{
+      ...card({
+        background: 'linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(59,158,255,0.06) 100%)',
+        border: '1px solid rgba(16,185,129,0.18)',
+        padding: '16px 20px',
+        textAlign: 'center',
+        marginBottom: 16,
+        overflow: 'hidden',
+        position: 'relative',
+      })
+    }}>
+      <div style=${{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 1,
+        background: 'linear-gradient(90deg, transparent, rgba(16,185,129,0.4), transparent)',
+      }} />
+      <div style=${{
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(6px)',
+        transition: 'opacity 0.4s ease, transform 0.4s ease',
+      }}>
+        <div style=${{ fontSize: 26, marginBottom: 6 }}>${msg.emoji}</div>
+        <div style=${{
+          fontSize: 15, fontWeight: 600, lineHeight: 1.4,
+          color: 'rgba(255,255,255,0.85)',
+        }}>
+          ${msg.text}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── NEW: Fun fact card ──────────────────────────────────────────────────────────
+
+function FunFactRotator() {
+  const [idx, setIdx] = useState(() => Math.floor(Math.random() * ALDER_FACTS.length));
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIdx(i => (i + 1) % ALDER_FACTS.length);
+        setVisible(true);
+      }, 400);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const item = ALDER_FACTS[idx];
+
+  return html`
+    <div style=${{
+      ...card({ padding: '16px 18px', marginBottom: 16 }),
+    }}>
+      <div style=${{
+        ...mono, fontSize: 10, color: '#3b9eff',
+        letterSpacing: '.14em', marginBottom: 10,
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <span style=${{ color: '#3b9eff', fontSize: 8 }}>◆</span>
+        ${item.label}
+      </div>
+      <div style=${{
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(5px)',
+        transition: 'opacity 0.4s ease, transform 0.4s ease',
+        display: 'flex', gap: 12, alignItems: 'flex-start',
+      }}>
+        <span style=${{ fontSize: 22, flexShrink: 0, marginTop: 1 }}>${item.icon}</span>
+        <p style=${{
+          color: 'rgba(255,255,255,0.7)', fontSize: 14, lineHeight: 1.6,
+          margin: 0,
+        }}>${item.fact}</p>
+      </div>
+    </div>
+  `;
+}
+
+// ── NEW: Affirmation ticker strip ───────────────────────────────────────────────
+
+function AffirmationTicker() {
+  const [idx, setIdx] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIdx(i => (i + 1) % WAIT_AFFIRMATIONS.length);
+        setVisible(true);
+      }, 300);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return html`
+    <div style=${{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      gap: 8, marginBottom: 16, minHeight: 22,
+    }}>
+      <span style=${{ color: '#10b981', fontSize: 8, animation: 'pulse 2s infinite' }}>●</span>
+      <span style=${{
+        ...mono, fontSize: 11,
+        color: 'rgba(255,255,255,0.35)',
+        opacity: visible ? 1 : 0,
+        transition: 'opacity 0.3s ease',
+        textAlign: 'center',
+      }}>
+        ${WAIT_AFFIRMATIONS[idx]}
+      </span>
+    </div>
+  `;
+}
+
+// ── NEW: Hype banner shown before job is found ──────────────────────────────────
+
+function PreSearchHype() {
+  return html`
+    <div style=${{
+      ...card({
+        background: 'rgba(16,185,129,0.04)',
+        border: '1px solid rgba(16,185,129,0.12)',
+        padding: '18px 20px',
+        marginBottom: 20,
+        textAlign: 'center',
+      })
+    }}>
+      <div style=${{ fontSize: 28, marginBottom: 8, animation: 'float 3s ease-in-out infinite', display: 'inline-block' }}>🛡️</div>
+      <div style=${{
+        fontSize: 13, fontWeight: 700, letterSpacing: '.08em',
+        marginBottom: 6,
+        background: 'linear-gradient(90deg, #10b981, #3b9eff, #a78bfa, #10b981)',
+        backgroundSize: '200% auto',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        backgroundClip: 'text',
+        animation: 'shimmer 3s linear infinite',
+      }}>YOUR HOME UPGRADE IS HAPPENING TODAY</div>
+      <div style=${{ color: 'rgba(255,255,255,0.35)', fontSize: 13, lineHeight: 1.5 }}>
+        Professional security. Real-time updates. Zero stress.
+      </div>
+    </div>
+  `;
+}
+
+// ── CustomerView ───────────────────────────────────────────────────────────────
+
 function CustomerView({ initialJobId }) {
   const [contact, setContact]   = useState('');
   const [job, setJob]           = useState(null);
@@ -256,13 +473,10 @@ function CustomerView({ initialJobId }) {
     const q = contact.trim();
     if (!q) return;
     setLoading(true); setError(''); setSearched(false); setJob(null);
-    
-    // FIXED WORKAROUND LOGIC: Direct structural lookup prevents missing rows
     const { data, error: err } = await sb
       .from('alder_jobs').select('*')
-      .or(`contact.eq.${q},contact.ilike.%${q}%`)
+      .or(`contact.eq."${q}",contact.ilike.%${q}%`)
       .order('created_at', { ascending: false });
-      
     setLoading(false); setSearched(true);
     if (err || !data?.length) {
       setError("We couldn't find a job with that info. Double-check your email or phone and try again.");
@@ -280,13 +494,16 @@ function CustomerView({ initialJobId }) {
   const isInQueue = job?.status === 'in_queue';
   const isEnRoute = job?.status === 'en_route';
   const isActive  = job?.status === 'active';
+  const isConfirmed = job?.status === 'confirmed';
+
+  const showHypeSection = job && (isConfirmed || isInQueue || isEnRoute || isActive);
 
   return html`
     <div style=${{ maxWidth: 560, margin: '0 auto', padding: '28px 20px 72px' }}>
       <div style=${{ marginBottom: 28 }}>
         <div style=${{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
           <span style=${{ fontSize: 20 }}>🛡️</span>
-          <span style=${{ ...mono, fontSize: 11, color: '#10b981', letterSpacing: 2 }}>ALDER SECURITY</span>
+          <span style=${{ ...mono, fontSize: 11, color: '#10b981', letterSpacing: 2 }}>ALDER TRACKER</span>
         </div>
         <h1 style=${{ fontSize: 27, fontWeight: 700, lineHeight: 1.1, marginBottom: 6 }}>
           Track Your Installation
@@ -297,6 +514,7 @@ function CustomerView({ initialJobId }) {
       </div>
 
       ${!job && html`
+        <${PreSearchHype} />
         <form onSubmit=${search} style=${{ marginBottom: 20 }}>
           <label style=${lbl}>Your Email or Phone Number</label>
           <div style=${{ display: 'flex', gap: 10 }}>
@@ -323,6 +541,7 @@ function CustomerView({ initialJobId }) {
 
       ${job && html`
         <div class="fade">
+
           ${isArmed && html`
             <div style=${{
               background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.35)',
@@ -333,8 +552,14 @@ function CustomerView({ initialJobId }) {
               <div style=${{ color: '#10b981', fontWeight: 700, fontSize: 20, marginBottom: 5 }}>
                 Your Home is Protected
               </div>
-              <div style=${{ color: 'rgba(255,255,255,0.55)', fontSize: 14 }}>
+              <div style=${{ color: 'rgba(255,255,255,0.55)', fontSize: 14, marginBottom: 10 }}>
                 Alder Security is fully armed and monitoring 24/7.
+              </div>
+              <div style=${{
+                ...mono, fontSize: 11, color: 'rgba(16,185,129,0.6)',
+                borderTop: '1px solid rgba(16,185,129,0.15)', paddingTop: 12, marginTop: 4,
+              }}>
+                🎉 Welcome to the most protected house on your block.
               </div>
             </div>
           `}
@@ -440,6 +665,20 @@ function CustomerView({ initialJobId }) {
             </div>
           `}
 
+          ${showHypeSection && html`
+            <div style=${{ marginTop: 6 }}>
+              <div style=${{
+                ...mono, fontSize: 10, color: 'rgba(255,255,255,0.2)',
+                letterSpacing: '.12em', textAlign: 'center', marginBottom: 12,
+              }}>
+                ── WHILE YOU WAIT ──
+              </div>
+              <${HypeRotator} />
+              <${FunFactRotator} />
+              <${AffirmationTicker} />
+            </div>
+          `}
+
           <div style=${{ textAlign: 'center', marginBottom: 14 }}>
             <span style=${{ ...mono, fontSize: 11, color: 'rgba(255,255,255,0.25)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span class="pulse" style=${{ color: '#10b981', fontSize: 8 }}>●</span>
@@ -456,7 +695,8 @@ function CustomerView({ initialJobId }) {
   `;
 }
 
-// ── JOB CARD (ADMIN) ─────────────────────────────────
+// ── Admin components (unchanged) ───────────────────────────────────────────────
+
 function JobCard({ job, onUpdate, onDelete }) {
   const [open, setOpen]         = useState(false);
   const [saving, setSaving]     = useState(false);
@@ -581,7 +821,6 @@ function JobCard({ job, onUpdate, onDelete }) {
   `;
 }
 
-// ── ADD JOB MODAL ─────────────────────────────────────
 function AddJobModal({ onAdd, onClose }) {
   const [form, setForm] = useState({
     customer_name: '', contact: '', address: '',
@@ -667,15 +906,14 @@ function AddJobModal({ onAdd, onClose }) {
   `;
 }
 
-// ── ADMIN VIEW ────────────────────────────────────────
 function AdminView() {
-  const [authed, setAuthed]       = useState(false);
-  const [pw, setPw]               = useState('');
-  const [pwErr, setPwErr]         = useState('');
-  const [jobs, setJobs]           = useState([]);
-  const [loading, setLoading]     = useState(false);
-  const [showAdd, setShowAdd]     = useState(false);
-  const [filter, setFilter]       = useState('all');
+  const [authed, setAuthed]   = useState(false);
+  const [pw, setPw]           = useState('');
+  const [pwErr, setPwErr]     = useState('');
+  const [jobs, setJobs]       = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [filter, setFilter]   = useState('all');
 
   function login(e) {
     e.preventDefault();
@@ -745,7 +983,7 @@ function AdminView() {
     <div style=${{ maxWidth: 920, margin: '0 auto', padding: '28px 20px 72px' }}>
       <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <div style=${{ ...mono, fontSize: 11, color: '#10b981', letterSpacing: 2, marginBottom: 5 }}>🛡️ ALDER SECURITY — ADMIN</div>
+          <div style=${{ ...mono, fontSize: 11, color: '#10b981', letterSpacing: 2, marginBottom: 5 }}>🛡️ ALDER TRACKER — ADMIN</div>
           <h1 style=${{ fontSize: 24, fontWeight: 700 }}>Job Tracker</h1>
         </div>
         <div style=${{ display: 'flex', gap: 10 }}>
@@ -790,12 +1028,10 @@ function AdminView() {
   `;
 }
 
-// ── ROOT ─────────────────────────────────────────────
 function App() {
   const params = new URLSearchParams(window.location.search);
   const isAdmin = params.get('admin') === 'true';
   const jobId   = params.get('job');
-
   if (isAdmin) return html`<${AdminView} />`;
   return html`<${CustomerView} initialJobId=${jobId} />`;
 }
