@@ -107,25 +107,18 @@ const HYPE_MESSAGES = [
   { emoji: '🎯', text: 'Plot twist: you just became the safest house on the block.' },
   { emoji: '🦾', text: 'Your home is about to get superpowers. Literally.' },
   { emoji: '🎉', text: 'Party at your place — it\'s the only one with a force field.' },
-];
-
-const ALDER_FACTS = [
-  { icon: '🏠', fact: 'Alder monitors over 180,000 homes across the country. Yours is next.', label: 'DID YOU KNOW' },
-  { icon: '⚡', fact: 'Alder\'s professional monitoring team responds in seconds — not minutes. Every. Single. Time.', label: 'FUN FACT' },
-  { icon: '📡', fact: 'Your system communicates with monitoring centers 24/7/365 — yes, even on Christmas.', label: 'FUN FACT' },
-  { icon: '🔋', fact: 'Alder systems have backup power so they keep protecting you even when the lights go out.', label: 'DID YOU KNOW' },
-  { icon: '🛡️', fact: 'Alder was founded with one mission: make professional security available to everyone. Mission accepted.', label: 'OUR STORY' },
-  { icon: '📱', fact: 'You\'ll be able to arm, disarm, and check in on your home from anywhere in the world. Vacation unlocked.', label: 'PRO TIP' },
-  { icon: '🚨', fact: 'If an alarm triggers, Alder dispatches emergency services immediately — no hold music, no waiting.', label: 'FUN FACT' },
-  { icon: '🤝', fact: 'Over a decade of protecting families. Alder has been doing this since 2012.', label: 'DID YOU KNOW' },
-];
-
-const WAIT_AFFIRMATIONS = [
-  'Hang tight — greatness takes a moment to arrive.',
-  'Good things come to those who wait. Great things come to Alder customers.',
-  'We promise this is worth it. (Spoiler: it absolutely is.)',
-  'Your patience is noted and deeply appreciated. ❤️',
-  'Fun fact: You\'re already safer than you were yesterday.',
+  { emoji: '🏠', text: 'Alder monitors over 180,000 homes across the country. Yours is next.', label: 'DID YOU KNOW' },
+  { emoji: '⚡', text: 'Alder\'s professional monitoring team responds in seconds — not minutes. Every. Single. Time.', label: 'FUN FACT' },
+  { emoji: '📡', text: 'Your system communicates with monitoring centers 24/7/365 — yes, even on Christmas.', label: 'FUN FACT' },
+  { emoji: '🔋', text: 'Alder systems have backup power so they keep protecting you even when the lights go out.', label: 'DID YOU KNOW' },
+  { emoji: '🛡️', text: 'Alder was founded with one mission: make professional security available to everyone. Mission accepted.', label: 'OUR STORY' },
+  { emoji: '📱', text: 'You\'ll be able to arm, disarm, and check in on your home from anywhere in the world. Vacation unlocked.', label: 'PRO TIP' },
+  { emoji: '🚨', text: 'If an alarm triggers, Alder dispatches emergency services immediately — no hold music, no waiting.', label: 'FUN FACT' },
+  { emoji: '🤝', text: 'Over a decade of protecting families. Alder has been at this since 2012.', label: 'DID YOU KNOW' },
+  { emoji: '💬', text: 'Hang tight — greatness takes a moment to arrive.' },
+  { emoji: '✨', text: 'Good things come to those who wait. Great things come to Alder customers.' },
+  { emoji: '🙏', text: 'We promise this is worth it. (Spoiler: it absolutely is.)' },
+  { emoji: '😴', text: 'Fun fact: You\'re already safer than you were yesterday.' },
 ];
 
 // ── Shared style helpers ───────────────────────────────────────────────────────
@@ -269,9 +262,7 @@ function ProgressBar({ status }) {
   );
 }
 
-// ── NEW: Rotating hype message ─────────────────────────────────────────────────
-
-function HypeRotator() {
+function WhileYouWait() {
   const [idx, setIdx] = useState(() => Math.floor(Math.random() * HYPE_MESSAGES.length));
   const [visible, setVisible] = useState(true);
 
@@ -279,10 +270,14 @@ function HypeRotator() {
     const interval = setInterval(() => {
       setVisible(false);
       setTimeout(() => {
-        setIdx(i => (i + 1) % HYPE_MESSAGES.length);
+        setIdx(i => {
+          let next;
+          do { next = Math.floor(Math.random() * HYPE_MESSAGES.length); } while (next === i);
+          return next;
+        });
         setVisible(true);
       }, 500);
-    }, 8000);
+    }, 9000);
     return () => clearInterval(interval);
   }, []);
 
@@ -294,10 +289,9 @@ function HypeRotator() {
         background: 'rgba(16,185,129,0.06)',
         border: '1px solid rgba(16,185,129,0.18)',
         padding: '18px 20px',
-        textAlign: 'center',
         marginBottom: 16,
-        overflow: 'hidden',
         position: 'relative',
+        overflow: 'hidden',
       })
     }}>
       <div style=${{
@@ -305,101 +299,24 @@ function HypeRotator() {
         background: 'linear-gradient(90deg, transparent, rgba(16,185,129,0.4), transparent)',
       }} />
       <div style=${{
+        ...mono, fontSize: 10, color: 'rgba(255,255,255,0.2)',
+        letterSpacing: '.12em', marginBottom: 12,
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <span style=${{ color: '#10b981', fontSize: 8, animation: 'pulse 2s infinite' }}>●</span>
+        ${msg.label ?? 'WHILE YOU WAIT'}
+      </div>
+      <div style=${{
         opacity: visible ? 1 : 0,
         transform: visible ? 'translateY(0)' : 'translateY(6px)',
         transition: 'opacity 0.5s ease, transform 0.5s ease',
+        display: 'flex', alignItems: 'flex-start', gap: 14,
       }}>
-        <div style=${{ fontSize: 28, marginBottom: 8 }}>${msg.emoji}</div>
-        <div style=${{
-          fontSize: 15, fontWeight: 600, lineHeight: 1.5,
-          color: '#e2f5ef',
-        }}>
+        <span style=${{ fontSize: 26, flexShrink: 0, lineHeight: 1.3 }}>${msg.emoji}</span>
+        <span style=${{ fontSize: 15, fontWeight: 600, lineHeight: 1.55, color: '#e2f5ef' }}>
           ${msg.text}
-        </div>
+        </span>
       </div>
-    </div>
-  `;
-}
-
-// ── NEW: Fun fact card ──────────────────────────────────────────────────────────
-
-function FunFactRotator() {
-  const [idx, setIdx] = useState(() => Math.floor(Math.random() * ALDER_FACTS.length));
-  const [visible, setVisible] = useState(true);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setVisible(false);
-      setTimeout(() => {
-        setIdx(i => (i + 1) % ALDER_FACTS.length);
-        setVisible(true);
-      }, 500);
-    }, 11000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const item = ALDER_FACTS[idx];
-
-  return html`
-    <div style=${{
-      ...card({ padding: '16px 18px', marginBottom: 16 }),
-    }}>
-      <div style=${{
-        ...mono, fontSize: 10, color: '#3b9eff',
-        letterSpacing: '.14em', marginBottom: 10,
-        display: 'flex', alignItems: 'center', gap: 6,
-      }}>
-        <span style=${{ color: '#3b9eff', fontSize: 8 }}>◆</span>
-        ${item.label}
-      </div>
-      <div style=${{
-        opacity: visible ? 1 : 0,
-        transform: visible ? 'translateY(0)' : 'translateY(5px)',
-        transition: 'opacity 0.4s ease, transform 0.4s ease',
-        display: 'flex', gap: 12, alignItems: 'flex-start',
-      }}>
-        <span style=${{ fontSize: 22, flexShrink: 0, marginTop: 1 }}>${item.icon}</span>
-        <p style=${{
-          color: 'rgba(255,255,255,0.7)', fontSize: 14, lineHeight: 1.6,
-          margin: 0,
-        }}>${item.fact}</p>
-      </div>
-    </div>
-  `;
-}
-
-// ── NEW: Affirmation ticker strip ───────────────────────────────────────────────
-
-function AffirmationTicker() {
-  const [idx, setIdx] = useState(0);
-  const [visible, setVisible] = useState(true);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setVisible(false);
-      setTimeout(() => {
-        setIdx(i => (i + 1) % WAIT_AFFIRMATIONS.length);
-        setVisible(true);
-      }, 400);
-    }, 9000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return html`
-    <div style=${{
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      gap: 8, marginBottom: 16, minHeight: 22,
-    }}>
-      <span style=${{ color: '#10b981', fontSize: 8, animation: 'pulse 2s infinite' }}>●</span>
-      <span style=${{
-        ...mono, fontSize: 11,
-        color: 'rgba(255,255,255,0.35)',
-        opacity: visible ? 1 : 0,
-        transition: 'opacity 0.3s ease',
-        textAlign: 'center',
-      }}>
-        ${WAIT_AFFIRMATIONS[idx]}
-      </span>
     </div>
   `;
 }
@@ -663,15 +580,7 @@ function CustomerView({ initialJobId }) {
 
           ${showHypeSection && html`
             <div style=${{ marginTop: 6 }}>
-              <div style=${{
-                ...mono, fontSize: 10, color: 'rgba(255,255,255,0.2)',
-                letterSpacing: '.12em', textAlign: 'center', marginBottom: 12,
-              }}>
-                ── WHILE YOU WAIT ──
-              </div>
-              <${HypeRotator} />
-              <${FunFactRotator} />
-              <${AffirmationTicker} />
+              <${WhileYouWait} />
             </div>
           `}
 
