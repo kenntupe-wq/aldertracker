@@ -57,22 +57,16 @@ import htm from 'htm';
 const html = htm.bind(h);
 
 // ══════════════════════════════════════════════════════
-//  !! FILL THESE IN BEFORE DEPLOYING !!
+//  CONFIGURED SUPABASE CREDENTIALS
 // ══════════════════════════════════════════════════════
 const SUPABASE_URL      = 'https://jhiwjzymcqsevlnmfth.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoaXdqaXp5bWNxc2V2bG5tZnRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTM5MjQsImV4cCI6MjA5NDQ2OTkyNH0.CE8pYqJU7f5eQDblTXWnbGyulUlKxDaj-wRJaVU4avM';
-const ADMIN_PASSWORD    = 'alder2025';   // change this
+const ADMIN_PASSWORD    = 'alder2025';
 // ══════════════════════════════════════════════════════
 
-const NOT_CONFIGURED =
-  SUPABASE_URL === 'YOUR_SUPABASE_PROJECT_URL' ||
-  SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY';
-
-const sb = NOT_CONFIGURED
-  ? null
-  : createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      realtime: { params: { eventsPerSecond: 10 } }
-    });
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  realtime: { params: { eventsPerSecond: 10 } }
+});
 
 // ── STATUS DEFINITIONS ────────────────────────────────
 const STATUSES = [
@@ -132,26 +126,6 @@ const lbl = {
   marginBottom: 7,
 };
 
-// ── SETUP SCREEN ──────────────────────────────────────
-function SetupScreen() {
-  return html`
-    <div style=${{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style=${{ ...card(), maxWidth: 480, width: '100%', textAlign: 'center', padding: 36 }}>
-        <div style=${{ fontSize: 40, marginBottom: 16 }}>⚙️</div>
-        <h2 style=${{ fontSize: 22, fontWeight: 700, marginBottom: 10 }}>Setup Required</h2>
-        <p style=${{ color: 'rgba(255,255,255,0.45)', lineHeight: 1.6, fontSize: 15, marginBottom: 20 }}>
-          Open <code style=${{ background: 'rgba(255,255,255,0.08)', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>index.html</code> and replace
-          <strong style=${{ color: '#f1f5f9' }}> SUPABASE_URL</strong> and <strong style=${{ color: '#f1f5f9' }}>SUPABASE_ANON_KEY</strong> at the top of the script with your Supabase project credentials.
-        </p>
-        <a href="https://supabase.com/dashboard" target="_blank"
-          style=${{ ...btn('#0070f3'), display: 'inline-block', textDecoration: 'none' }}>
-          Open Supabase Dashboard →
-        </a>
-      </div>
-    </div>
-  `;
-}
-
 // ── STATUS BADGE ──────────────────────────────────────
 function StatusBadge({ status }) {
   const s = STATUSES.find(x => x.key === status) || STATUSES[0];
@@ -184,8 +158,6 @@ function Spinner() {
 // ── PROGRESS BAR ──────────────────────────────────────
 function ProgressBar({ status }) {
   const current = STATUS_IDX[status] ?? 0;
-
-  // Build two rows: (1) dots + connectors, (2) labels
   const dotRow = [];
   const lblRow = [];
 
@@ -194,7 +166,6 @@ function ProgressBar({ status }) {
     const active = i === current;
     const dotColor = done ? '#10b981' : active ? s.color : '#1e2433';
 
-    // connector before each dot except first
     if (i > 0) {
       dotRow.push(h('div', {
         key: `line-${i}`,
@@ -207,7 +178,6 @@ function ProgressBar({ status }) {
       }));
     }
 
-    // dot
     dotRow.push(h('div', {
       key: `dot-${s.key}`,
       style: {
@@ -222,7 +192,6 @@ function ProgressBar({ status }) {
       }
     }, done ? '✓' : s.icon));
 
-    // label (flex: 1 except middle ones get extra spacing)
     lblRow.push(h('div', {
       key: `lbl-${s.key}`,
       style: {
@@ -262,7 +231,6 @@ function CustomerView({ initialJobId }) {
     else inputRef.current?.focus();
   }, []);
 
-  // Real-time subscription on active job
   useEffect(() => {
     if (!job?.id) return;
     const ch = sb.channel('customer-job-' + job.id)
@@ -288,11 +256,13 @@ function CustomerView({ initialJobId }) {
     const q = contact.trim();
     if (!q) return;
     setLoading(true); setError(''); setSearched(false); setJob(null);
+    
+    // FIXED WORKAROUND LOGIC: Direct structural lookup prevents missing rows
     const { data, error: err } = await sb
       .from('alder_jobs').select('*')
-      .ilike('contact', `%${q}%`)
-      .order('created_at', { ascending: false })
-      .limit(1);
+      .or(`contact.eq.${q},contact.ilike.%${q}%`)
+      .order('created_at', { ascending: false });
+      
     setLoading(false); setSearched(true);
     if (err || !data?.length) {
       setError("We couldn't find a job with that info. Double-check your email or phone and try again.");
@@ -313,12 +283,10 @@ function CustomerView({ initialJobId }) {
 
   return html`
     <div style=${{ maxWidth: 560, margin: '0 auto', padding: '28px 20px 72px' }}>
-
-      <!-- Header -->
       <div style=${{ marginBottom: 28 }}>
         <div style=${{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
           <span style=${{ fontSize: 20 }}>🛡️</span>
-          <span style=${{ ...mono, fontSize: 11, color: '#0070f3', letterSpacing: 2 }}>ALDER SECURITY</span>
+          <span style=${{ ...mono, fontSize: 11, color: '#10b981', letterSpacing: 2 }}>ALDER SECURITY</span>
         </div>
         <h1 style=${{ fontSize: 27, fontWeight: 700, lineHeight: 1.1, marginBottom: 6 }}>
           Track Your Installation
@@ -328,7 +296,6 @@ function CustomerView({ initialJobId }) {
         </p>
       </div>
 
-      <!-- Search form -->
       ${!job && html`
         <form onSubmit=${search} style=${{ marginBottom: 20 }}>
           <label style=${lbl}>Your Email or Phone Number</label>
@@ -342,7 +309,7 @@ function CustomerView({ initialJobId }) {
               style=${{ ...inp(), flex: 1 }}
             />
             <button type="submit" disabled=${loading}
-              style=${{ ...btn('#0070f3'), padding: '11px 22px', opacity: loading ? .6 : 1, flexShrink: 0 }}>
+              style=${{ ...btn('#10b981'), padding: '11px 22px', opacity: loading ? .6 : 1, flexShrink: 0 }}>
               ${loading ? html`<${Spinner} />` : 'Find'}
             </button>
           </div>
@@ -354,11 +321,8 @@ function CustomerView({ initialJobId }) {
         </form>
       `}
 
-      <!-- Job card -->
       ${job && html`
         <div class="fade">
-
-          <!-- Armed banner -->
           ${isArmed && html`
             <div style=${{
               background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.35)',
@@ -375,7 +339,6 @@ function CustomerView({ initialJobId }) {
             </div>
           `}
 
-          <!-- En-route alert -->
           ${isEnRoute && html`
             <div style=${{
               background: 'rgba(0,112,243,0.08)', border: '1px solid rgba(0,112,243,0.3)',
@@ -392,7 +355,6 @@ function CustomerView({ initialJobId }) {
             </div>
           `}
 
-          <!-- Active alert -->
           ${isActive && html`
             <div style=${{
               background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.3)',
@@ -409,7 +371,6 @@ function CustomerView({ initialJobId }) {
             </div>
           `}
 
-          <!-- Main status card -->
           <div style=${{ ...card(), marginBottom: 14 }}>
             <div style=${{
               display: 'flex', justifyContent: 'space-between',
@@ -424,11 +385,9 @@ function CustomerView({ initialJobId }) {
               </div>
               <${StatusBadge} status=${job.status} />
             </div>
-
             <${ProgressBar} status=${job.status} />
           </div>
 
-          <!-- Queue info -->
           ${isInQueue && html`
             <div style=${{
               ...card({ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)' }),
@@ -453,7 +412,6 @@ function CustomerView({ initialJobId }) {
             </div>
           `}
 
-          <!-- Tech + ETA -->
           ${(job.tech_name || job.eta) && !isInQueue && html`
             <div style=${{ ...card(), marginBottom: 14 }}>
               <div style=${{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -473,19 +431,15 @@ function CustomerView({ initialJobId }) {
             </div>
           `}
 
-          <!-- Notes from tech -->
           ${job.notes && html`
-            <div style=${{
-              ...card({ border: '1px solid rgba(0,112,243,0.2)' }), marginBottom: 14,
-            }}>
-              <div style=${{ ...lbl, color: '#3b9eff' }}>Note from your technician</div>
+            <div style=${{ ...card({ border: '1px solid rgba(16,185,129,0.2)' }), marginBottom: 14 }}>
+              <div style=${{ ...lbl, color: '#10b981' }}>Note from your technician</div>
               <div style=${{ color: 'rgba(255,255,255,0.75)', lineHeight: 1.65, fontSize: 15 }}>
                 ${job.notes}
               </div>
             </div>
           `}
 
-          <!-- Live indicator -->
           <div style=${{ textAlign: 'center', marginBottom: 14 }}>
             <span style=${{ ...mono, fontSize: 11, color: 'rgba(255,255,255,0.25)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span class="pulse" style=${{ color: '#10b981', fontSize: 8 }}>●</span>
@@ -493,8 +447,7 @@ function CustomerView({ initialJobId }) {
             </span>
           </div>
 
-          <button onClick=${reset}
-            style=${{ ...btn('rgba(255,255,255,0.05)'), width: '100%', fontSize: 13 }}>
+          <button onClick=${reset} style=${{ ...btn('rgba(255,255,255,0.05)'), width: '100%', fontSize: 13 }}>
             ← Search a Different Number
           </button>
         </div>
@@ -512,7 +465,6 @@ function JobCard({ job, onUpdate, onDelete }) {
   const [tech, setTech]         = useState(job.tech_name || '');
   const [notes, setNotes]       = useState(job.notes || '');
 
-  // Keep local state in sync if parent updates (realtime)
   useEffect(() => {
     setEta(job.eta || '');
     setQPos(job.queue_position ?? '');
@@ -542,21 +494,9 @@ function JobCard({ job, onUpdate, onDelete }) {
   });
 
   return html`
-    <div style=${{
-      ...card({ borderColor: `${s.color}28`, padding: 0 }),
-      overflow: 'hidden',
-    }}>
-
-      <!-- Card top bar -->
+    <div style=${{ ...card({ borderColor: `${s.color}28`, padding: 0 }), overflow: 'hidden' }}>
       <div style=${{ height: 3, background: s.color, borderRadius: '14px 14px 0 0', opacity: .7 }} />
-
-      <!-- Card header -->
-      <div style=${{
-        padding: '16px 18px',
-        display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12, flexWrap: 'wrap',
-      }}>
+      <div style=${{ padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style=${{ flex: 1, minWidth: 200 }}>
           <div style=${{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
             <span style=${{ fontSize: 16, fontWeight: 700 }}>${job.customer_name}</span>
@@ -579,7 +519,6 @@ function JobCard({ job, onUpdate, onDelete }) {
           </div>
         </div>
 
-        <!-- Controls -->
         <div style=${{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <select
             value=${job.status}
@@ -593,67 +532,45 @@ function JobCard({ job, onUpdate, onDelete }) {
               })
             }}
           >
-            ${STATUSES.map(st => html`
-              <option key=${st.key} value=${st.key}>${st.label}</option>
-            `)}
+            ${STATUSES.map(st => html`<option key=${st.key} value=${st.key}>${st.label}</option>`)}
           </select>
 
-          <button onClick=${() => setOpen(o => !o)}
-            style=${{ ...btn('rgba(255,255,255,0.06)', { padding: '8px 13px', fontSize: 13, color: 'rgba(255,255,255,0.5)' }) }}>
+          <button onClick=${() => setOpen(o => !o)} style=${{ ...btn('rgba(255,255,255,0.06)', { padding: '8px 13px', fontSize: 13, color: 'rgba(255,255,255,0.5)' }) }}>
             ${open ? '▲' : '▼'}
           </button>
-
-          <button onClick=${() => onDelete(job.id)}
-            style=${{ ...btn('rgba(239,68,68,0.1)', { padding: '8px 12px', fontSize: 13, color: '#f87171' }) }}>
+          <button onClick=${() => onDelete(job.id)} style=${{ ...btn('rgba(239,68,68,0.1)', { padding: '8px 12px', fontSize: 13, color: '#f87171' }) }}>
             ✕
           </button>
         </div>
       </div>
 
-      <!-- Expanded editor -->
       ${open && html`
-        <div class="fade" style=${{
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-          padding: '18px 18px 16px',
-          background: 'rgba(0,0,0,0.2)',
-        }}>
+        <div class="fade" style=${{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '18px 18px 16px', background: 'rgba(0,0,0,0.2)' }}>
           <div style=${{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
             <div>
               <label style=${lbl}>Technician</label>
-              <input value=${tech} onChange=${e => setTech(e.target.value)}
-                placeholder="e.g. Kenneth" style=${inp()} />
+              <input value=${tech} onChange=${e => setTech(e.target.value)} placeholder="e.g. Kenneth" style=${inp()} />
             </div>
             <div>
               <label style=${lbl}>ETA</label>
-              <input value=${eta} onChange=${e => setEta(e.target.value)}
-                placeholder="e.g. 2:30 PM or ~45 min" style=${inp()} />
+              <input value=${eta} onChange=${e => setEta(e.target.value)} placeholder="e.g. 2:30 PM" style=${inp()} />
             </div>
             <div>
               <label style=${lbl}>Queue Position</label>
-              <input type="number" min="1" value=${qPos}
-                onChange=${e => setQPos(e.target.value)}
-                placeholder="1" style=${inp()} />
+              <input type="number" min="1" value=${qPos} onChange=${e => setQPos(e.target.value)} placeholder="1" style=${inp()} />
             </div>
           </div>
           <div style=${{ marginBottom: 14 }}>
             <label style=${lbl}>Note to Customer</label>
-            <textarea value=${notes} onChange=${e => setNotes(e.target.value)}
-              placeholder="Any message the customer should see on their status screen..."
-              rows="2"
-              style=${{ ...inp(), resize: 'vertical' }}
-            />
+            <textarea value=${notes} onChange=${e => setNotes(e.target.value)} placeholder="Message shown to customer..." rows="2" style=${{ ...inp(), resize: 'vertical' }} />
           </div>
           <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-            <div style=${{ ...mono, fontSize: 11, color: 'rgba(255,255,255,0.18)' }}>
-              ID: ${job.id.slice(0, 12)}…
-            </div>
+            <div style=${{ ...mono, fontSize: 11, color: 'rgba(255,255,255,0.18)' }}>ID: ${job.id.slice(0, 12)}…</div>
             <div style=${{ display: 'flex', gap: 10 }}>
-              <button onClick=${() => setOpen(false)}
-                style=${{ ...btn('rgba(255,255,255,0.05)', { fontSize: 13, padding: '9px 16px', color: 'rgba(255,255,255,0.4)' }) }}>
+              <button onClick=${() => setOpen(false)} style=${{ ...btn('rgba(255,255,255,0.05)', { fontSize: 13, padding: '9px 16px', color: 'rgba(255,255,255,0.4)' }) }}>
                 Cancel
               </button>
-              <button onClick=${save} disabled=${saving}
-                style=${{ ...btn('#0070f3', { opacity: saving ? .6 : 1, padding: '9px 20px' }) }}>
+              <button onClick=${save} disabled=${saving} style=${{ ...btn('#10b981', { opacity: saving ? .6 : 1, padding: '9px 20px' }) }}>
                 ${saving ? html`<${Spinner} />` : '✓ Save'}
               </button>
             </div>
@@ -672,7 +589,6 @@ function AddJobModal({ onAdd, onClose }) {
     queue_position: '', eta: '', notes: '',
   });
   const [saving, setSaving] = useState(false);
-
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   async function submit(e) {
@@ -681,7 +597,7 @@ function AddJobModal({ onAdd, onClose }) {
     setSaving(true);
     await onAdd({
       customer_name:  form.customer_name,
-      contact:        form.contact,
+      contact:        form.contact.trim(),
       address:        form.address || null,
       status:         form.status,
       tech_name:      form.tech_name || null,
@@ -693,91 +609,55 @@ function AddJobModal({ onAdd, onClose }) {
   }
 
   return html`
-    <div
-      onClick=${e => e.target === e.currentTarget && onClose()}
-      style=${{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 100, padding: 20,
-      }}
-    >
+    <div onClick=${e => e.target === e.currentTarget && onClose()} style=${{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }}>
       <div style=${{ ...card(), width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto' }} class="fade">
         <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style=${{ fontSize: 19, fontWeight: 700 }}>Add New Job</h3>
-          <button onClick=${onClose}
-            style=${{ ...btn('transparent', { padding: '4px 10px', fontSize: 18, color: 'rgba(255,255,255,0.4)' }) }}>
-            ✕
-          </button>
+          <button onClick=${onClose} style=${{ ...btn('transparent', { padding: '4px 10px', fontSize: 18, color: 'rgba(255,255,255,0.4)' }) }}>✕</button>
         </div>
 
         <form onSubmit=${submit}>
           <div style=${{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
               <label style=${lbl}>Customer Name *</label>
-              <input required value=${form.customer_name}
-                onChange=${e => set('customer_name', e.target.value)}
-                placeholder="Full Name" style=${inp()} />
+              <input required value=${form.customer_name} onChange=${e => set('customer_name', e.target.value)} placeholder="Full Name" style=${inp()} />
             </div>
             <div>
               <label style=${lbl}>Email or Phone *</label>
-              <input required value=${form.contact}
-                onChange=${e => set('contact', e.target.value)}
-                placeholder="email or phone" style=${inp()} />
+              <input required value=${form.contact} onChange=${e => set('contact', e.target.value)} placeholder="email or phone" style=${inp()} />
             </div>
           </div>
-
           <div style=${{ marginBottom: 12 }}>
             <label style=${lbl}>Address</label>
-            <input value=${form.address}
-              onChange=${e => set('address', e.target.value)}
-              placeholder="123 Main St, Jackson, MS" style=${inp()} />
+            <input value=${form.address} onChange=${e => set('address', e.target.value)} placeholder="Address" style=${inp()} />
           </div>
-
           <div style=${{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
               <label style=${lbl}>Status</label>
-              <select value=${form.status}
-                onChange=${e => set('status', e.target.value)}
-                style=${{ ...inp(), cursor: 'pointer' }}>
+              <select value=${form.status} onChange=${e => set('status', e.target.value)} style=${{ ...inp(), cursor: 'pointer' }}>
                 ${STATUSES.map(s => html`<option key=${s.key} value=${s.key}>${s.label}</option>`)}
               </select>
             </div>
             <div>
               <label style=${lbl}>Technician</label>
-              <input value=${form.tech_name}
-                onChange=${e => set('tech_name', e.target.value)}
-                placeholder="Kenneth" style=${inp()} />
+              <input value=${form.tech_name} onChange=${e => set('tech_name', e.target.value)} placeholder="Kenneth" style=${inp()} />
             </div>
             <div>
               <label style=${lbl}>Queue Position</label>
-              <input type="number" min="1" value=${form.queue_position}
-                onChange=${e => set('queue_position', e.target.value)}
-                placeholder="1" style=${inp()} />
+              <input type="number" min="1" value=${form.queue_position} onChange=${e => set('queue_position', e.target.value)} placeholder="1" style=${inp()} />
             </div>
           </div>
-
           <div style=${{ marginBottom: 12 }}>
             <label style=${lbl}>ETA</label>
-            <input value=${form.eta}
-              onChange=${e => set('eta', e.target.value)}
-              placeholder="e.g. 2:30 PM or ~45 min" style=${inp()} />
+            <input value=${form.eta} onChange=${e => set('eta', e.target.value)} placeholder="e.g. 2:30 PM" style=${inp()} />
           </div>
-
           <div style=${{ marginBottom: 20 }}>
             <label style=${lbl}>Note to Customer</label>
-            <textarea value=${form.notes}
-              onChange=${e => set('notes', e.target.value)}
-              placeholder="Optional message shown on the customer's tracking screen..."
-              rows="2" style=${{ ...inp(), resize: 'vertical' }} />
+            <textarea value=${form.notes} onChange=${e => set('notes', e.target.value)} placeholder="Optional message..." rows="2" style=${{ ...inp(), resize: 'vertical' }} />
           </div>
-
           <div style=${{ display: 'flex', gap: 10 }}>
-            <button type="button" onClick=${onClose}
-              style=${{ ...btn('rgba(255,255,255,0.05)', { flex: 1, color: 'rgba(255,255,255,0.4)' }) }}>
-              Cancel
-            </button>
-            <button type="submit" disabled=${saving}
-              style=${{ ...btn('#10b981', { flex: 2, opacity: saving ? .6 : 1 }) }}>
+            <button type="button" onClick=${onClose} style=${{ ...btn('rgba(255,255,255,0.05)', { flex: 1, color: 'rgba(255,255,255,0.4)' }) }}>Cancel</button>
+            <button type="submit" disabled=${saving} style=${{ ...btn('#10b981', { flex: 2, opacity: saving ? .6 : 1 }) }}>
               ${saving ? html`<${Spinner} />` : '+ Add Job'}
             </button>
           </div>
@@ -850,14 +730,9 @@ function AdminView() {
           </div>
           <form onSubmit=${login}>
             <label style=${lbl}>Password</label>
-            <input type="password" value=${pw} onChange=${e => setPw(e.target.value)}
-              placeholder="Enter admin password" style=${{ ...inp(), marginBottom: 12 }} autoFocus />
-            ${pwErr && html`
-              <div style=${{ color: '#f87171', fontSize: 13, marginBottom: 10, ...mono }}>${pwErr}</div>
-            `}
-            <button type="submit" style=${{ ...btn('#0070f3'), width: '100%', padding: 13 }}>
-              Access Panel
-            </button>
+            <input type="password" value=${pw} onChange=${e => setPw(e.target.value)} placeholder="Enter admin password" style=${{ ...inp(), marginBottom: 12 }} autoFocus />
+            ${pwErr && html`<div style=${{ color: '#f87171', fontSize: 13, marginBottom: 10, ...mono }}>${pwErr}</div>`}
+            <button type="submit" style=${{ ...btn('#10b981'), width: '100%', padding: 13 }}>Access Panel</button>
           </form>
         </div>
       </div>
@@ -868,95 +743,49 @@ function AdminView() {
 
   return html`
     <div style=${{ maxWidth: 920, margin: '0 auto', padding: '28px 20px 72px' }}>
-
-      <!-- Header -->
-      <div style=${{
-        display: 'flex', justifyContent: 'space-between',
-        alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12,
-      }}>
+      <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <div style=${{ ...mono, fontSize: 11, color: '#0070f3', letterSpacing: 2, marginBottom: 5 }}>
-            🛡️ ALDER SECURITY — ADMIN
-          </div>
+          <div style=${{ ...mono, fontSize: 11, color: '#10b981', letterSpacing: 2, marginBottom: 5 }}>🛡️ ALDER SECURITY — ADMIN</div>
           <h1 style=${{ fontSize: 24, fontWeight: 700 }}>Job Tracker</h1>
         </div>
         <div style=${{ display: 'flex', gap: 10 }}>
-          <button onClick=${loadJobs}
-            style=${{ ...btn('rgba(255,255,255,0.06)', { fontSize: 13, color: 'rgba(255,255,255,0.5)' }) }}>
-            ↻ Refresh
-          </button>
-          <button onClick=${() => setShowAdd(true)} style=${{ ...btn('#10b981') }}>
-            + Add Job
-          </button>
+          <button onClick=${loadJobs} style=${{ ...btn('rgba(255,255,255,0.06)', { fontSize: 13, color: 'rgba(255,255,255,0.5)' }) }}>↻ Refresh</button>
+          <button onClick=${() => setShowAdd(true)} style=${{ ...btn('#10b981') }}>+ Add Job</button>
         </div>
       </div>
 
-      <!-- Stats strip -->
       <div style=${{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 20 }}>
         ${STATUSES.map(s => {
           const count = jobs.filter(j => j.status === s.key).length;
           return html`
-            <div key=${s.key}
-              onClick=${() => setFilter(f => f === s.key ? 'all' : s.key)}
-              style=${{
-                ...card({
-                  padding: '12px 14px', textAlign: 'center', cursor: 'pointer',
-                  border: filter === s.key ? `1px solid ${s.color}` : `1px solid ${count > 0 ? s.color + '30' : 'rgba(255,255,255,0.07)'}`,
-                  background: filter === s.key ? s.color + '14' : '#131720',
-                  transition: 'all .2s',
-                })
-              }}
-            >
+            <div key=${s.key} onClick=${() => setFilter(f => f === s.key ? 'all' : s.key)} style=${{ ...card({ padding: '12px 14px', textAlign: 'center', cursor: 'pointer', border: filter === s.key ? `1px solid ${s.color}` : `1px solid ${count > 0 ? s.color + '30' : 'rgba(255,255,255,0.07)'}`, background: filter === s.key ? s.color + '14' : '#131720', transition: 'all .2s' }) }}>
               <div style=${{ ...mono, fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 4 }}>${s.short}</div>
-              <div style=${{ fontSize: 26, fontWeight: 700, color: count > 0 ? s.color : 'rgba(255,255,255,0.15)' }}>
-                ${count}
-              </div>
+              <div style=${{ fontSize: 26, fontWeight: 700, color: count > 0 ? s.color : 'rgba(255,255,255,0.15)' }}>${count}</div>
             </div>
           `;
         })}
       </div>
 
-      <!-- Filter label -->
       ${filter !== 'all' && html`
         <div style=${{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <span style=${{ ...mono, fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
-            Showing: ${STATUS_IDX[filter] !== undefined ? STATUSES[STATUS_IDX[filter]].label : filter}
-          </span>
-          <button onClick=${() => setFilter('all')}
-            style=${{ ...btn('rgba(255,255,255,0.06)', { padding: '4px 10px', fontSize: 12, color: 'rgba(255,255,255,0.45)' }) }}>
-            Clear ✕
-          </button>
+          <span style=${{ ...mono, fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Showing: ${STATUS_IDX[filter] !== undefined ? STATUSES[STATUS_IDX[filter]].label : filter}</span>
+          <button onClick=${() => setFilter('all')} style=${{ ...btn('rgba(255,255,255,0.06)', { padding: '4px 10px', fontSize: 12, color: 'rgba(255,255,255,0.45)' }) }}>Clear ✕</button>
         </div>
       `}
 
-      <!-- Job list -->
-      ${loading && html`
-        <div style=${{ textAlign: 'center', padding: 48 }}><${Spinner} /></div>
-      `}
-
+      ${loading && html`<div style=${{ textAlign: 'center', padding: 48 }}><${Spinner} /></div>`}
       ${!loading && filteredJobs.length === 0 && html`
         <div style=${{ ...card(), textAlign: 'center', padding: 48 }}>
           <div style=${{ fontSize: 36, marginBottom: 12 }}>📋</div>
-          <div style=${{ color: 'rgba(255,255,255,0.3)', fontSize: 15 }}>
-            ${filter === 'all' ? 'No jobs yet. Add your first one.' : 'No jobs with this status.'}
-          </div>
+          <div style=${{ color: 'rgba(255,255,255,0.3)', fontSize: 15 }}>${filter === 'all' ? 'No jobs yet. Add your first one.' : 'No jobs with this status.'}</div>
         </div>
       `}
 
       <div style=${{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        ${filteredJobs.map(job => html`
-          <${JobCard}
-            key=${job.id}
-            job=${job}
-            onUpdate=${updateJob}
-            onDelete=${deleteJob}
-          />
-        `)}
+        ${filteredJobs.map(job => html`<${JobCard} key=${job.id} job=${job} onUpdate=${updateJob} onDelete=${deleteJob} />`)}
       </div>
 
-      ${showAdd && html`
-        <${AddJobModal} onAdd=${addJob} onClose=${() => setShowAdd(false)} />
-      `}
+      ${showAdd && html`<${AddJobModal} onAdd=${addJob} onClose=${() => setShowAdd(false)} />`}
     </div>
   `;
 }
@@ -967,8 +796,7 @@ function App() {
   const isAdmin = params.get('admin') === 'true';
   const jobId   = params.get('job');
 
-  if (NOT_CONFIGURED) return html`<${SetupScreen} />`;
-  if (isAdmin)        return html`<${AdminView} />`;
+  if (isAdmin) return html`<${AdminView} />`;
   return html`<${CustomerView} initialJobId=${jobId} />`;
 }
 
